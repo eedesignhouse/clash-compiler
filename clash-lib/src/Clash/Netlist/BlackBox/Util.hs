@@ -645,6 +645,9 @@ prettyElem (IndexType e) = do
 prettyElem (Size e) = do
   e' <- prettyElem e
   renderOneLine <$> (string "~SIZE" <> brackets (string e'))
+prettyElem (IsVoid e) = do
+  e' <- prettyElem e
+  renderOneLine <$> (string "~ISVOID" <> brackets (string e'))
 prettyElem (Length e) = do
   e' <- prettyElem e
   renderOneLine <$> (string "~LENGTH" <> brackets (string e'))

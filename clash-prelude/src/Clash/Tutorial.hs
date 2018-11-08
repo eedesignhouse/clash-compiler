@@ -1269,6 +1269,7 @@ a general listing of the available template holes:
   literal
 * @~ISGATED[N]@: Is the @(N+1)@'th argument a gated clock, errors when called on
   an argument which is not a 'Clock'.
+* @~ISVOID[N]@: Is the @(N+1)@'th argument a zero-width element
 * @~ISSYNC[N]@: Is the @(N+1)@'th argument a synchronous reset, errors when
   called on an argument which is not a 'Reset'.
 * @~AND[\<HOLE1\>,\<HOLE2\>,..]@: Logically /and/ the conditions in the @\<HOLE\>@'s

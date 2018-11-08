@@ -102,6 +102,7 @@ pTagE =  O True            <$  string "~ERESULT"
      <|> Sel               <$> (string "~SEL" *> brackets' pTagE) <*> brackets' natural'
      <|> IsLit             <$> (string "~ISLIT" *> brackets' natural')
      <|> IsVar             <$> (string "~ISVAR" *> brackets' natural')
+     <|> IsVoid            <$> (string "~ISVOID" *> brackets' pTagE)
      <|> IsGated           <$> (string "~ISGATED" *> brackets' natural')
      <|> IsSync            <$> (string "~ISSYNC" *> brackets' natural')
      <|> StrCmp            <$> (string "~STRCMP" *> brackets' pSigD) <*> brackets' natural'
