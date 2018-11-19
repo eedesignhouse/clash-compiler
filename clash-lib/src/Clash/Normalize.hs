@@ -37,7 +37,6 @@ import           Clash.Annotations.BitRepresentation.Internal
   (CustomReprs)
 import           Clash.Core.Evaluator             (PrimEvaluator)
 import           Clash.Core.FreeVars              (termFreeIds, idOccursIn)
-import           Clash.Core.Name                  (Name (..), NameSort (..))
 import           Clash.Core.Pretty                (showPpr, ppr)
 import           Clash.Core.Subst                 (deShadowTerm, extendIdSubstList, mkSubst, substTm)
 import           Clash.Core.Term                  (Term (..))
@@ -47,8 +46,10 @@ import           Clash.Core.TyCon
 import           Clash.Core.Util                  (collectArgs, mkApps, termType)
 import           Clash.Core.Var                   (Id, varName, varType)
 import           Clash.Core.VarEnv
-  (InScopeSet, VarEnv, eltsVarEnv, emptyInScopeSet, emptyVarEnv,
-   extendVarEnv, lookupVarEnv, mapVarEnv, mapMaybeVarEnv, mkInScopeSet, mkVarEnv, mkVarSet, notElemVarEnv, notElemVarSet, nullVarEnv, unionVarEnv)
+  (InScopeSet, VarEnv, elemVarSet, eltsVarEnv, emptyInScopeSet, emptyVarEnv,
+   extendVarEnv, lookupVarEnv, mapVarEnv, mapMaybeVarEnv, mkInScopeSet,
+   mkVarEnv, mkVarSet, notElemVarEnv, notElemVarSet, nullVarEnv, unionVarEnv,
+   unionVarSet)
 import           Clash.Driver.Types
   (BindingMap, ClashOpts (..), DebugLevel (..))
 import           Clash.Netlist.Types              (HWType (..))
@@ -251,7 +252,8 @@ cleanupGraph
   -> NormalizeSession BindingMap
 cleanupGraph topEntity norm
   | Just ct <- mkCallTree [] norm topEntity
-  = do let inScope = mkInScopeSet (uniqMapToUniqSet (mapVarEnv (coerce . Lens.view _1) norm))
+  = do let normSet = uniqMapToUniqSet (mapVarEnv (coerce . Lens.view _1) norm)
+       inScope <- mkInScopeSet . unionVarSet normSet <$> Lens.view topEntities
        ctFlat <- flattenCallTree inScope ct
        return (mkVarEnv $ snd $ callTreeToList [] ctFlat)
 cleanupGraph _ norm = return norm
@@ -298,32 +300,33 @@ stripArgs _ _ _ = Nothing
 flattenNode
   :: CallTree
   -> NormalizeSession (Either CallTree ((Id,Term),[CallTree]))
-flattenNode (CLeaf (nm,(nameSort . varName -> Internal,_,_,e))) =
-  return (Right ((nm,e),[]))
+flattenNode c@(CLeaf (_,(_,_,NoInline,_))) = return (Left c)
 flattenNode c@(CLeaf (nm,(_,_,_,e))) = do
-  tcm  <- Lens.view tcCache
-  let norm = splitNormalized tcm e
-  case norm of
-    Right (ids,[(_,bExpr)],_) -> do
-      let (fun,args) = collectArgs bExpr
-      case stripArgs ids (reverse ids) (reverse args) of
-        Just remainder -> return (Right ((nm,mkApps fun (reverse remainder)),[]))
-        Nothing        -> return (Right ((nm,e),[]))
-    _ | isCheapFunction e -> return (Right ((nm,e),[]))
-      | otherwise         -> return (Left c)
-flattenNode (CBranch (nm,(nameSort . varName -> Internal,_,_,e)) us) =
-  return (Right ((nm,e),us))
+  isTopEntity <- elemVarSet nm <$> Lens.view topEntities
+  if isTopEntity then return (Left c) else do
+    tcm  <- Lens.view tcCache
+    let norm = splitNormalized tcm e
+    case norm of
+      Right (ids,[(_,bExpr)],_) -> do
+        let (fun,args) = collectArgs bExpr
+        case stripArgs ids (reverse ids) (reverse args) of
+          Just remainder -> return (Right ((nm,mkApps fun (reverse remainder)),[]))
+          Nothing        -> return (Right ((nm,e),[]))
+      _ -> return (Right ((nm,e),[]))
+flattenNode b@(CBranch (_,(_,_,NoInline,_)) _) =
+  return (Left b)
 flattenNode b@(CBranch (nm,(_,_,_,e)) us) = do
-  tcm  <- Lens.view tcCache
-  let norm = splitNormalized tcm e
-  case norm of
-    Right (ids,[(_,bExpr)],_) -> do
-      let (fun,args) = collectArgs bExpr
-      case stripArgs ids (reverse ids) (reverse args) of
-        Just remainder -> return (Right ((nm,mkApps fun (reverse remainder)),us))
-        Nothing        -> return (Right ((nm,e),us))
-    _ | isCheapFunction e -> return (Right ((nm,e),us))
-      | otherwise         -> return (Left b)
+  isTopEntity <- elemVarSet nm <$> Lens.view topEntities
+  if isTopEntity then return (Left b) else do
+    tcm  <- Lens.view tcCache
+    let norm = splitNormalized tcm e
+    case norm of
+      Right (ids,[(_,bExpr)],_) -> do
+        let (fun,args) = collectArgs bExpr
+        case stripArgs ids (reverse ids) (reverse args) of
+          Just remainder -> return (Right ((nm,mkApps fun (reverse remainder)),us))
+          Nothing        -> return (Right ((nm,e),us))
+      _ -> return (Right ((nm,e),us))
 
 flattenCallTree
   :: InScopeSet
